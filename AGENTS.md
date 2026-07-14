@@ -240,7 +240,7 @@ project:
 - In production code and shared fixtures, avoid `.expect()` entirely: return
   `Result` and use `?` to propagate errors instead of panicking.
 - Keep `expect_used` **strict**; do not suppress the lint.
-- Recognise that `allow-expect-in-tests = true` **doesn’t cover** helpers
+- Recognize that `allow-expect-in-tests = true` **doesn’t cover** helpers
   outside `#[cfg(test)]` or `#[test]`; avoid `expect` in such fixtures.
 - Use `anyhow`/`eyre` with `.context(...)` to **preserve backtraces** and
   provide clear, typed failure paths.
@@ -299,6 +299,19 @@ The following tooling is available in this environment:
   and enables editing by syntax tree patterns.
 - `difft` **(Difftastic)** — Semantic diff tool that compares code structure
   rather than just text differences.
+
+## Spelling guidance
+
+- Validate Markdown files with `make markdownlint`. This target also enforces
+  en-GB-oxendict spelling with the pinned `typos` release.
+- The spelling configuration `typos.toml` is generated. Edit
+  `typos.local.toml` for narrow repository terminology, then run
+  `make spelling-config`; never edit generated entries by hand. The shared
+  config builder refreshes its untracked dictionary cache when the authoritative
+  dictionary is newer.
+- Quoted APIs and identifiers retain upstream spelling. Put them in backticks
+  or fenced code blocks, which the spelling gate ignores, rather than adding
+  word-level exceptions.
 
 ## Key Takeaway
 
