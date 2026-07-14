@@ -27,6 +27,16 @@ jobs:
             **/*.md
             !**/target/**
             !**/dist/**
+      - name: Setup uv
+        uses: astral-sh/setup-uv@ca5ddd015e07666cb1f1340ad6171f5e7afffb3e
+      - name: Install Markdown diagram tooling
+        run: |
+          uv tool install nixie-cli==1.1.0
+          cargo install merman-cli --version 0.7.0 --locked
+      - name: Spelling
+        run: make spelling
+      - name: Mermaid diagrams
+        run: make nixie
       - name: Cache whitaker-installer
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
