@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@3c1fa01bcf4c26dac79975c18b74c01d577dcf95
+        uses: leynos/shared-actions/.github/actions/setup-rust@c3141c3d4cb2a2828d2abbcf3d94b15197740c58
       - name: Format
         run: make check-fmt
       - name: Markdown lint
