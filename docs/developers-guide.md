@@ -2,10 +2,10 @@
 
 ## Spelling policy
 
-The tracked `typos.toml` is generated from the shared estate dictionary and
-the repository-specific `typos.local.toml` overlay. Never edit generated
-entries by hand. Add only narrow repository terminology to the overlay, then
-regenerate and verify the configuration with:
+The tracked `typos.toml` is generated from the shared estate dictionary and the
+repository-specific `typos.local.toml` overlay. Never edit generated entries by
+hand. Add only narrow repository terminology to the overlay, then regenerate
+and verify the configuration with:
 
 ```bash
 make spelling-config

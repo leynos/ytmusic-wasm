@@ -214,8 +214,8 @@ project:
 ### Dependency Management
 
 - **Mandate caret requirements for all dependencies.** All crate versions
-  specified in `Cargo.toml` must use SemVer-compatible caret requirements
-  (e.g., `some-crate = "1.2.3"`). This is Cargo's default and allows for safe,
+  specified in `Cargo.toml` must use SemVer-compatible caret requirements (e.g.,
+  `some-crate = "1.2.3"`). This is Cargo's default and allows for safe,
   non-breaking updates to minor and patch versions while preventing breaking
   changes from new major versions. This approach is critical for ensuring build
   stability and reproducibility.
@@ -307,8 +307,8 @@ The following tooling is available in this environment:
 - The spelling configuration `typos.toml` is generated. Edit
   `typos.local.toml` for narrow repository terminology, then run
   `make spelling-config`; never edit generated entries by hand. The shared
-  config builder refreshes its untracked dictionary cache when the authoritative
-  dictionary is newer.
+  config builder refreshes its untracked dictionary cache when the
+  authoritative dictionary is newer.
 - Quoted APIs and identifiers retain upstream spelling. Put them in backticks
   or fenced code blocks, which the spelling gate ignores, rather than adding
   word-level exceptions.
