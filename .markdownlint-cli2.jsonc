@@ -15,6 +15,11 @@
     ".node_modules/**",
     "**/node_modules/**",
     "**/target/**",
-    ".uv-cache/**"
+    ".uv-cache/**",
+    ".vtcode/**",
+    ".terraform/**",
+    "memories/**",
+    "CRUSH.md",
+    "**/dist/**"
   ]
 }
