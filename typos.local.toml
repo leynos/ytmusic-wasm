@@ -17,9 +17,9 @@ ignore = [
   # GitHub requires this exact pull-request event type.
   'types: \[opened, reopened, synchronize, labeled, ready_for_review\]',
   # Preserve exact formal upstream documentation titles across wrapped lines.
-  'Azure Architecture\s+Center \| Microsoft Learn',
-  'GitHub Flavored\s+Markdown \(GFM\)',
   'LogRocket Blog — Organizing Rust tests',
+  # Inline code spans are masked; the shared dictionary does not mask them yet.
+  '`[^`\n]+`',
 ]
 
 [files]
