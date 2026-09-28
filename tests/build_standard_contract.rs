@@ -223,13 +223,20 @@ fn assignment(line: &str, inherited: Option<&str>) -> Read<Option<Flags>> {
     expanded(value, inherited).map(Some)
 }
 
+/// Returns whether a dry-run line runs cargo or Whitaker, as opposed to
+/// merely naming one, as an `echo` of the Whitaker path does.
+fn runs_cargo_or_whitaker(line: &str) -> bool {
+    let first = line.split_whitespace().next().unwrap_or_default();
+    !matches!(first, "echo" | "printf") && (line.contains("cargo") || line.contains("whitaker"))
+}
+
 /// Returns, for each cargo or whitaker command `make -n TARGET` would run on
 /// the host, the `RUSTFLAGS` it assigns (expanded under `inherited`), or
 /// `None` when it assigns none.
 fn make_rustflags(target: &str, host: Host, inherited: Option<&str>) -> Read<Vec<Option<Flags>>> {
     let commands = dry_run(target, host, inherited)?
         .lines()
-        .filter(|line| line.contains("cargo") || line.contains("whitaker"))
+        .filter(|line| runs_cargo_or_whitaker(line))
         .map(|line| assignment(line, inherited))
         .collect::<Read<Vec<_>>>()?;
     if commands.is_empty() {
