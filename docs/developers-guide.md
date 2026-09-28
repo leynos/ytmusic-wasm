@@ -35,7 +35,9 @@ development profile's backend.
 Cargo applies a single `rustflags` source rather than merging them, and an
 assigned `RUSTFLAGS` replaces every source. So each source repeats the frontend
 flag, and the Makefile restates both flags as `STANDARD_RUSTFLAGS` for the
-targets that assign `RUSTFLAGS`. Release builds assign an empty inherited
-`RUSTFLAGS` and so take neither flag. CI installs `mold` before the first gate
-target. `tests/build_standard_contract.rs` holds the configuration and the
-Makefile recipes to this.
+targets that assign `RUSTFLAGS`, adding them to any `RUSTFLAGS` the recipe
+inherits (setup-rust exports one in CI) rather than replacing it. Release
+builds assign an empty inherited `RUSTFLAGS` and so take neither flag. CI
+installs `mold` before the first gate target.
+`tests/build_standard_contract.rs` holds the configuration and the Makefile
+recipes to this.

@@ -43,9 +43,10 @@ const HELD_OUT_TARGETS: [&str; 1] = ["release"];
 /// so the restatement checks above cannot pass by finding nothing to check.
 const ASSIGNING_TARGETS: [&str; 2] = ["test", "build"];
 
-/// A caller's own flags, to prove a recipe keeps the standard when it
-/// inherits an exported `RUSTFLAGS`.
-const INHERITED: &str = "-D warnings";
+/// A caller's own flags, distinct from anything a recipe adds, to prove a
+/// recipe composes an exported `RUSTFLAGS` with the standard flags rather than
+/// replacing either.
+const INHERITED: &str = "--cfg inherited_from_caller";
 
 /// The result of a reader, which the tests unwrap.
 type Read<T> = Result<T, Box<dyn Error>>;
@@ -126,10 +127,14 @@ fn make_rustflags(
     host: &str,
     inherited: Option<&str>,
 ) -> Read<Vec<Option<Vec<String>>>> {
-    let output = Command::new("make")
-        .args(["-n", "-B", &format!("BUILD_HOST_OS={host}"), target])
+    let mut make = Command::new("make");
+    make.args(["-n", "-B", &format!("BUILD_HOST_OS={host}"), target])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()?;
+        .env_remove("RUSTFLAGS");
+    if let Some(flags) = inherited {
+        make.env("RUSTFLAGS", flags);
+    }
+    let output = make.output()?;
     if !output.status.success() {
         return Err(format!("`make -n {target}` failed").into());
     }
@@ -162,6 +167,14 @@ fn make_rustflags(
     Ok(commands)
 }
 
+/// Report whether `flags` holds the caller's words as one unbroken run.
+fn carries_run(flags: &[String], caller: &str) -> bool {
+    let wanted: Vec<&str> = caller.split_whitespace().collect();
+    flags
+        .windows(wanted.len())
+        .any(|run| run.iter().map(String::as_str).eq(wanted.iter().copied()))
+}
+
 /// Checks every development target on one host: an assigned `RUSTFLAGS`
 /// carries the frontend flag, and carries mold exactly when the host is Linux.
 fn check_development_targets(
@@ -184,6 +197,11 @@ fn check_development_targets(
             if names(&flags, MOLD_FLAG) != expects_mold {
                 problems.push(format!(
                     "`make {target}` on {host} gets mold wrong: {flags:?}"
+                ));
+            }
+            if inherited.is_some_and(|caller| !carries_run(&flags, caller)) {
+                problems.push(format!(
+                    "`make {target}` drops the caller's RUSTFLAGS: {flags:?}"
                 ));
             }
         }
