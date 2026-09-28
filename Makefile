@@ -5,6 +5,24 @@ TARGET ?= libytmusic_wasm.rlib
 CARGO ?= cargo
 BUILD_JOBS ?=
 RUST_FLAGS ?= -D warnings
+# The build standard: every `rustflags` source in `.cargo/config.toml` carries
+# the parallel frontend, and the Linux source adds `mold`. Assigning
+# `RUSTFLAGS` replaces those sources outright, so the targets that assign it
+# restate the flags here. Coverage and release builds deliberately take neither.
+STANDARD_THREADS_FLAG ?= -Zthreads=8
+STANDARD_MOLD_FLAG ?= -Clink-arg=-fuse-ld=mold
+BUILD_HOST_OS ?= $(shell uname -s)
+STANDARD_RUSTFLAGS = $(STANDARD_THREADS_FLAG)$(if $(filter Linux,$(BUILD_HOST_OS)), $(STANDARD_MOLD_FLAG))
+# Release builds take neither flag: assigning `RUSTFLAGS`, even to an empty
+# inherited value, displaces every `rustflags` source in the configuration.
+RELEASE_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS-}"
+# Debug builds keep a caller's exported flags and add the standard ones,
+# since an inherited `RUSTFLAGS` would otherwise displace the configuration.
+DEBUG_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)"
+# Whitaker's Dylint driver runs on its own pinned toolchain, which need not
+# carry the Cranelift component the development profile selects, so its
+# check builds take LLVM.
+WHITAKER_CODEGEN_BACKEND ?= llvm
 CARGO_FLAGS ?= --all-targets --all-features
 CLIPPY_FLAGS ?= $(CARGO_FLAGS) -- $(RUST_FLAGS)
 TEST_FLAGS ?= $(CARGO_FLAGS)
@@ -35,15 +53,15 @@ clean: ## Remove build artefacts
 	$(CARGO) clean
 
 test: ## Run tests with warnings treated as errors
-	RUSTFLAGS="$(RUST_FLAGS)" $(CARGO) test $(TEST_FLAGS) $(BUILD_JOBS)
+	RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(CARGO) test $(TEST_FLAGS) $(BUILD_JOBS)
 
 target/%/$(TARGET): ## Build binary in debug or release mode
-	$(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release)
+	$(if $(findstring release,$(@)),$(RELEASE_RUSTFLAGS),$(DEBUG_RUSTFLAGS)) $(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release)
 
 lint: ## Run Clippy and the Whitaker Dylint suite with warnings denied
 	RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --no-deps
 	$(CARGO) clippy $(CLIPPY_FLAGS)
-	RUSTFLAGS="$(RUST_FLAGS)" $(WHITAKER) --all -- $(CARGO_FLAGS)
+	CARGO_PROFILE_DEV_CODEGEN_BACKEND=$(WHITAKER_CODEGEN_BACKEND) RUSTFLAGS="$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)" $(WHITAKER) --all -- $(CARGO_FLAGS)
 
 fmt: ## Format Rust and Markdown sources
 	$(CARGO) fmt --all
