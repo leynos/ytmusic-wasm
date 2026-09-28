@@ -51,27 +51,44 @@ const INHERITED: &str = "--cfg inherited_from_caller";
 /// The result of a reader, which the tests unwrap.
 type Read<T> = Result<T, Box<dyn Error>>;
 
-/// A host the Makefile can be read as, through its `BUILD_HOST_OS` override.
+/// A host the Makefile can be read as, through its `BUILD_HOST_OS` override,
+/// optionally building for another target through `CARGO_BUILD_TARGET`.
 #[derive(Clone, Copy, Debug)]
 enum Host {
-    /// Linux, where the standard adds mold.
+    /// Linux building for itself, where the standard adds mold.
     Linux,
     /// macOS, which keeps its platform linker.
     Darwin,
+    /// Linux building for the named target triple, which gets mold only when
+    /// the triple is itself Linux, as Cargo matches `[target.*]` sources.
+    LinuxBuildingFor(&'static str),
 }
 
 impl Host {
     /// Returns the `uname -s` spelling the Makefile compares against.
     const fn uname(self) -> &'static str {
         match self {
-            Self::Linux => "Linux",
+            Self::Linux | Self::LinuxBuildingFor(_) => "Linux",
             Self::Darwin => "Darwin",
         }
     }
 
-    /// Returns whether the standard adds mold on this host.
-    const fn expects_mold(self) -> bool {
-        matches!(self, Self::Linux)
+    /// Returns the `make` overrides that select this host and target.
+    fn overrides(self) -> Vec<String> {
+        let host = format!("BUILD_HOST_OS={}", self.uname());
+        match self {
+            Self::LinuxBuildingFor(triple) => vec![host, format!("CARGO_BUILD_TARGET={triple}")],
+            Self::Linux | Self::Darwin => vec![host],
+        }
+    }
+
+    /// Returns whether the standard adds mold on this host and target.
+    fn expects_mold(self) -> bool {
+        match self {
+            Self::Linux => true,
+            Self::Darwin => false,
+            Self::LinuxBuildingFor(triple) => triple.contains("-linux-"),
+        }
     }
 }
 
@@ -173,13 +190,10 @@ fn expanded(value: &str, inherited: Option<&str>) -> Read<Flags> {
 /// backslash-continued recipe line joined into one command.
 fn dry_run(target: &str, host: Host, inherited: Option<&str>) -> Read<String> {
     let mut make = Command::new("make");
-    make.args([
-        "-n",
-        "-B",
-        &format!("BUILD_HOST_OS={}", host.uname()),
-        target,
-    ])
-    .current_dir(env!("CARGO_MANIFEST_DIR"));
+    make.args(["-n", "-B"])
+        .args(host.overrides())
+        .arg(target)
+        .current_dir(env!("CARGO_MANIFEST_DIR"));
     with_inherited(&mut make, inherited);
     let output = make.output()?;
     if !output.status.success() {
@@ -225,16 +239,21 @@ fn make_rustflags(target: &str, host: Host, inherited: Option<&str>) -> Read<Vec
 }
 
 /// Checks every development target on one host: an assigned `RUSTFLAGS`
-/// carries the frontend flag, carries mold exactly when the host is Linux, and
-/// keeps an inherited `RUSTFLAGS`.
+/// carries the frontend flag, carries mold exactly when the host and target
+/// are Linux, and keeps an inherited `RUSTFLAGS`. Under an inherited
+/// `RUSTFLAGS` every command must assign, because the caller's value displaces
+/// the configuration's sources; setup-rust exports one in CI.
 fn check_development_targets(host: Host, inherited: Option<&str>) -> Read<Vec<String>> {
     let mut problems = Vec::new();
     for target in DEVELOPMENT_TARGETS {
+        let commands = make_rustflags(target, host, inherited)?;
+        if inherited.is_some() && commands.iter().any(Option::is_none) {
+            problems.push(format!(
+                "`make {target}` runs a command that takes only the caller's RUSTFLAGS"
+            ));
+        }
         // An empty assignment is `Some(Flags(vec![]))` and is checked like any other.
-        for flags in make_rustflags(target, host, inherited)?
-            .into_iter()
-            .flatten()
-        {
+        for flags in commands.into_iter().flatten() {
             if !flags.names(THREADS_FLAG) {
                 problems.push(format!(
                     "`make {target}` on {host:?} drops {THREADS_FLAG}: {flags:?}"
@@ -332,6 +351,20 @@ fn development_targets_keep_the_standard_under_inherited_rustflags() {
 #[test]
 fn development_targets_keep_the_frontend_but_not_mold_elsewhere() {
     let problems = check_development_targets(Host::Darwin, None).expect("read `make -n` output");
+    assert!(problems.is_empty(), "{problems:#?}");
+}
+
+/// A Linux host building for another platform through `CARGO_BUILD_TARGET`
+/// must not be handed mold, while a Linux target keeps it.
+#[test]
+fn development_targets_leave_mold_off_a_non_linux_target() {
+    let mut problems =
+        check_development_targets(Host::LinuxBuildingFor("aarch64-apple-darwin"), None)
+            .expect("read `make -n` output");
+    problems.extend(
+        check_development_targets(Host::LinuxBuildingFor("aarch64-unknown-linux-gnu"), None)
+            .expect("read `make -n` output"),
+    );
     assert!(problems.is_empty(), "{problems:#?}");
 }
 
