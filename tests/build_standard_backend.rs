@@ -1,0 +1,229 @@
+//! Contract tests for the build standard's code-generation backend.
+//!
+//! The standard makes Cranelift the development profile's backend, which needs
+//! the unstable Cargo key and the toolchain component. Two builds must not use
+//! it: coverage, because Cranelift cannot build `-Cinstrument-coverage`, and
+//! Whitaker's Dylint driver, which builds outside the workspace configuration.
+//! These tests hold the configuration, the coverage step's overrides and the
+//! `make lint` Whitaker boundary, which the flag contract does not reach.
+//!
+//! File access goes through `cap_std` directory handles: one rooted at the
+//! crate manifest directory, and one at a scratch directory under
+//! `CARGO_TARGET_TMPDIR` for the fake tools.
+
+use std::{error::Error, process::Command};
+
+use cap_std::{ambient_authority, fs::Dir};
+
+/// The result of a reader, which the tests unwrap.
+type Read<T> = Result<T, Box<dyn Error>>;
+
+/// The toolchain component Cranelift needs.
+const CRANELIFT_COMPONENT: &str = "rustc-codegen-cranelift-preview";
+
+/// The overrides a build outside the workspace configuration needs to take
+/// LLVM: the unstable feature, then the profile's backend.
+const LLVM_OVERRIDES: [&str; 2] = [
+    "CARGO_UNSTABLE_CODEGEN_BACKEND",
+    "CARGO_PROFILE_DEV_CODEGEN_BACKEND",
+];
+
+/// Reads a file relative to the crate manifest directory.
+fn read(path: &str) -> Read<String> {
+    let root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())?;
+    Ok(root.read_to_string(path)?)
+}
+
+/// Reads a TOML file relative to the crate manifest directory.
+fn read_toml(path: &str) -> Read<toml::Value> {
+    Ok(toml::from_str(&read(path)?)?)
+}
+
+/// Follows a path of table keys through a TOML value.
+fn value_at<'a>(root: &'a toml::Value, path: &[&str]) -> Option<&'a toml::Value> {
+    path.iter().try_fold(root, |value, key| value.get(key))
+}
+
+#[test]
+fn cranelift_is_the_development_backend() {
+    let config = read_toml(".cargo/config.toml").expect("read the Cargo configuration");
+    assert_eq!(
+        value_at(&config, &["unstable", "codegen-backend"]).and_then(toml::Value::as_bool),
+        Some(true),
+        "`[unstable] codegen-backend = true` is what lets Cargo accept the profile key"
+    );
+    assert_eq!(
+        value_at(&config, &["profile", "dev", "codegen-backend"]).and_then(toml::Value::as_str),
+        Some("cranelift"),
+        "the development profile no longer selects Cranelift"
+    );
+    let toolchain = read_toml("rust-toolchain.toml").expect("read the toolchain file");
+    let has_component = value_at(&toolchain, &["toolchain", "components"])
+        .and_then(toml::Value::as_array)
+        .is_some_and(|components| {
+            components
+                .iter()
+                .any(|c| c.as_str() == Some(CRANELIFT_COMPONENT))
+        });
+    assert!(
+        has_component,
+        "the pinned toolchain lacks `{CRANELIFT_COMPONENT}`"
+    );
+}
+
+/// Returns the number of leading spaces on a line.
+fn indent(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
+/// Returns whether a line begins a YAML sequence item, which is a workflow step.
+fn starts_step(line: &str) -> bool {
+    line.trim_start().starts_with("- ")
+}
+
+/// Returns the lines of the workflow step that runs the coverage action.
+///
+/// A step starts at a `- ` line and runs to the next `- ` line at the same or
+/// a shallower indent, so nested lists inside the step stay with it.
+fn coverage_step(workflow: &str) -> Vec<&str> {
+    let lines: Vec<&str> = workflow.lines().collect();
+    let step_starts: Vec<usize> = (0..lines.len())
+        .filter(|&i| lines.get(i).is_some_and(|line| starts_step(line)))
+        .collect();
+    let bounds = lines
+        .iter()
+        .position(|line| line.contains("generate-coverage@"))
+        .and_then(|uses| {
+            let start = step_starts.iter().copied().rfind(|&i| i <= uses)?;
+            let start_indent = indent(lines.get(start)?);
+            let end = step_starts
+                .iter()
+                .copied()
+                .find(|&i| {
+                    i > uses
+                        && lines
+                            .get(i)
+                            .is_some_and(|line| indent(line) <= start_indent)
+                })
+                .unwrap_or(lines.len());
+            Some(start..end)
+        });
+    bounds
+        .and_then(|range| lines.get(range))
+        .map(<[&str]>::to_vec)
+        .unwrap_or_default()
+}
+
+#[test]
+fn coverage_builds_on_llvm() {
+    let workflow = read(".github/workflows/ci.yml").expect("read ci.yml");
+    let step = coverage_step(&workflow);
+    assert!(!step.is_empty(), "ci.yml has no `generate-coverage` step");
+    for name in LLVM_OVERRIDES {
+        let wanted = if name == "CARGO_UNSTABLE_CODEGEN_BACKEND" {
+            "true"
+        } else {
+            "llvm"
+        };
+        let has_override = step.iter().any(|line| {
+            let mut words = line.trim().splitn(2, ':');
+            words.next() == Some(name)
+                && words
+                    .next()
+                    .is_some_and(|value| value.trim().trim_matches('"') == wanted)
+        });
+        assert!(
+            has_override,
+            "the coverage step does not set {name}={wanted}"
+        );
+    }
+}
+
+/// Runs `make lint` with fake tools first on `PATH`, returning whether it
+/// succeeded and the environment the fake Whitaker recorded.
+///
+/// Cargo is replaced by `true`, so `doc` and `clippy` succeed without
+/// building. The fake Whitaker writes its environment to a file and exits with
+/// `whitaker_status`. Each test passes its own `scratch` directory name, since
+/// the tests run concurrently and a shared directory would be cleared under one
+/// of them.
+#[cfg(unix)]
+fn lint_with_fake_whitaker(scratch: &str, whitaker_status: i32) -> Read<(bool, String)> {
+    use cap_std::fs::{OpenOptions, OpenOptionsExt};
+
+    let target_tmp = Dir::open_ambient_dir(env!("CARGO_TARGET_TMPDIR"), ambient_authority())?;
+    // A clean directory keeps a record from an earlier run out.
+    target_tmp
+        .remove_dir_all(scratch)
+        .or_else(|error| match error.kind() {
+            std::io::ErrorKind::NotFound => Ok(()),
+            _ => Err(error),
+        })?;
+    target_tmp.create_dir(scratch)?;
+    let dir = target_tmp.open_dir(scratch)?;
+    let script = format!("#!/bin/sh\nenv > \"$WHITAKER_RECORD\"\nexit {whitaker_status}\n");
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true).mode(0o755);
+    std::io::Write::write_all(&mut dir.open_with("whitaker", &options)?, script.as_bytes())?;
+    let root = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(scratch);
+    let path = format!("{}:{}", root.display(), std::env::var("PATH")?);
+    let output = Command::new("make")
+        .args(["lint", "CARGO=true"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("PATH", path)
+        .env("WHITAKER_RECORD", root.join("record"))
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_BUILD_TARGET")
+        .output()?;
+    let record = dir.read_to_string("record").unwrap_or_default();
+    Ok((output.status.success(), record))
+}
+
+#[cfg(unix)]
+#[test]
+fn a_failing_whitaker_run_fails_lint() {
+    let (succeeded, record) =
+        lint_with_fake_whitaker("whitaker-fails", 1).expect("run `make lint`");
+    assert!(!succeeded, "`make lint` passed although Whitaker failed");
+    assert!(
+        !record.is_empty(),
+        "`make lint` never ran the fake Whitaker"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_passing_whitaker_run_passes_lint() {
+    let (succeeded, record) =
+        lint_with_fake_whitaker("whitaker-passes", 0).expect("run `make lint`");
+    assert!(succeeded, "`make lint` failed although Whitaker passed");
+    assert!(
+        !record.is_empty(),
+        "`make lint` never ran the fake Whitaker"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn whitaker_builds_on_llvm_with_the_composed_flags() {
+    let (_, record) = lint_with_fake_whitaker("whitaker-env", 0).expect("run `make lint`");
+    let value = |name: &str| {
+        record
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("{name}=")))
+            .map(str::to_owned)
+    };
+    assert_eq!(
+        value("CARGO_UNSTABLE_CODEGEN_BACKEND").as_deref(),
+        Some("true")
+    );
+    assert_eq!(
+        value("CARGO_PROFILE_DEV_CODEGEN_BACKEND").as_deref(),
+        Some("llvm")
+    );
+    let flags = value("RUSTFLAGS").expect("Whitaker received no RUSTFLAGS");
+    assert!(
+        flags.contains("-Zthreads=8"),
+        "Whitaker lost the frontend flag: {flags}"
+    );
+}
