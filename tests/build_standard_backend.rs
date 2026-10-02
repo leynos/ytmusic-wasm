@@ -14,6 +14,7 @@
 use std::{error::Error, process::Command};
 
 use cap_std::{ambient_authority, fs::Dir};
+use rstest::rstest;
 
 /// The result of a reader, which the tests unwrap.
 type Read<T> = Result<T, Box<dyn Error>>;
@@ -179,24 +180,18 @@ fn lint_with_fake_whitaker(scratch: &str, whitaker_status: i32) -> Read<(bool, S
     Ok((output.status.success(), record))
 }
 
+/// A Whitaker exit status decides `make lint`, and the fake is always run.
 #[cfg(unix)]
-#[test]
-fn a_failing_whitaker_run_fails_lint() {
-    let (succeeded, record) =
-        lint_with_fake_whitaker("whitaker-fails", 1).expect("run `make lint`");
-    assert!(!succeeded, "`make lint` passed although Whitaker failed");
-    assert!(
-        !record.is_empty(),
-        "`make lint` never ran the fake Whitaker"
+#[rstest]
+#[case::failing("whitaker-fails", 1)]
+#[case::passing("whitaker-passes", 0)]
+fn lint_succeeds_exactly_when_whitaker_does(#[case] scratch: &str, #[case] status: i32) {
+    let (succeeded, record) = lint_with_fake_whitaker(scratch, status).expect("run `make lint`");
+    assert_eq!(
+        succeeded,
+        status == 0,
+        "`make lint` ignored Whitaker's exit status {status}"
     );
-}
-
-#[cfg(unix)]
-#[test]
-fn a_passing_whitaker_run_passes_lint() {
-    let (succeeded, record) =
-        lint_with_fake_whitaker("whitaker-passes", 0).expect("run `make lint`");
-    assert!(succeeded, "`make lint` failed although Whitaker passed");
     assert!(
         !record.is_empty(),
         "`make lint` never ran the fake Whitaker"

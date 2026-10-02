@@ -26,12 +26,14 @@ Development builds follow the estate's Rust build standard, which
 `.cargo/config.toml` sets and Cargo auto-discovers, so a bare `cargo build`
 gets it. Every `rustflags` source enables the parallel `rustc` frontend with
 `-Zthreads=8`, and the `cfg(target_os = "linux")` source also links with
-`mold`; macOS and Windows keep their platform linker. A Linux host therefore
-needs `mold` installed before any `cargo` or `make` build, build scripts
-included. Cranelift is the development-profile codegen backend: the whole suite
-passes under it on the pinned `nightly-2026-03-05`. Coverage holds the
-development profile on LLVM, because `-Cinstrument-coverage` is LLVM-only and
-the test profile inherits the development profile's backend.
+`mold`; macOS and Windows keep their platform linker. A debug build for a
+WebAssembly target (`CARGO_BUILD_TARGET` of `wasm32` or `wasm64`) takes LLVM,
+because Cranelift has no WebAssembly target. A Linux host therefore needs
+`mold` installed before any `cargo` or `make` build, build scripts included.
+Cranelift is the development-profile codegen backend: the whole suite passes
+under it on the pinned `nightly-2026-03-05`. Coverage holds the development
+profile on LLVM, because `-Cinstrument-coverage` is LLVM-only and the test
+profile inherits the development profile's backend.
 
 Cargo applies a single `rustflags` source rather than merging them, and an
 assigned `RUSTFLAGS` replaces every source. So each source repeats the frontend
