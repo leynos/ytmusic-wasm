@@ -170,7 +170,9 @@ fn lint_with_fake_whitaker(scratch: &str, whitaker_status: i32) -> Read<(Output,
     options.write(true).create_new(true).mode(0o755);
     std::io::Write::write_all(&mut dir.open_with("whitaker", &options)?, script.as_bytes())?;
     let root = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(scratch);
-    let path = format!("{}:{}", root.display(), std::env::var("PATH")?);
+    // A fixed PATH keeps the run hermetic: the fake first, then the system
+    // directories that hold `sh`, `env` and the `true` standing in for cargo.
+    let path = format!("{}:/usr/bin:/bin", root.display());
     let output = Command::new("make")
         .args(["lint", "CARGO=true"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
