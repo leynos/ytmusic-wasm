@@ -178,6 +178,9 @@ fn lint_with_fake_whitaker(scratch: &str, whitaker_status: i32) -> Read<(Output,
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .env("PATH", path)
         .env("WHITAKER_RECORD", root.join("record"))
+        // The Makefile searches `$HOME`-relative tool directories too, so point
+        // it at the scratch directory rather than a real home.
+        .env("HOME", &root)
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_BUILD_TARGET")
         .env_remove("MAKEFLAGS")
@@ -186,7 +189,14 @@ fn lint_with_fake_whitaker(scratch: &str, whitaker_status: i32) -> Read<(Output,
         .output()?;
     // A missing record means the fake never ran; surface that rather than
     // reading it as an empty successful one.
-    let record = dir.read_to_string("record")?;
+    let record = dir.read_to_string("record").map_err(|error| {
+        format!(
+            "the fake Whitaker left no record ({error}); `make lint` exited {} with stdout {} and stderr {}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+    })?;
     Ok((output, record))
 }
 
@@ -232,27 +242,46 @@ fn whitaker_builds_on_llvm_with_the_composed_flags() {
     );
 }
 
+/// Links the few system tools `make lint` needs into a scratch directory, so a
+/// run whose `PATH` is only that directory cannot see an installed Whitaker.
+#[cfg(unix)]
+fn tool_directory(scratch: &str) -> Read<std::path::PathBuf> {
+    let target_tmp = Dir::open_ambient_dir(env!("CARGO_TARGET_TMPDIR"), ambient_authority())?;
+    target_tmp
+        .remove_dir_all(scratch)
+        .or_else(|error| match error.kind() {
+            std::io::ErrorKind::NotFound => Ok(()),
+            _ => Err(error),
+        })?;
+    target_tmp.create_dir(scratch)?;
+    let root = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(scratch);
+    for tool in ["sh", "env", "true", "make", "uname"] {
+        let source = ["/usr/bin", "/bin"]
+            .iter()
+            .map(|base| std::path::Path::new(base).join(tool))
+            .find(|path| path.exists())
+            .ok_or_else(|| format!("no system `{tool}` to link"))?;
+        // `cap_std` refuses a link to an absolute path outside its directory,
+        // and a link to a system tool is exactly that.
+        std::os::unix::fs::symlink(source, root.join(tool))?;
+    }
+    Ok(root)
+}
+
 /// A missing Whitaker binary skips the check with a message and `make lint`
 /// still succeeds, since it is an optional tool; a present one that fails is
-/// covered above. `PATH` is narrowed to the system directories, where Whitaker
-/// is not installed, and the test refuses to run if it is found there anyway.
+/// covered above. `PATH` is a scratch directory holding only the system tools
+/// `make` needs, and `HOME` points at it, so neither an installed Whitaker nor
+/// the Makefile's `$HOME`-relative search paths can supply one.
 #[cfg(unix)]
 #[test]
 fn a_missing_whitaker_skips_the_check_and_lint_succeeds() {
-    let system_path = "/usr/bin:/bin";
-    let found = Command::new("sh")
-        .args(["-c", "command -v whitaker"])
-        .env("PATH", system_path)
-        .output()
-        .expect("probe for Whitaker");
-    assert!(
-        !found.status.success(),
-        "Whitaker is installed under {system_path}"
-    );
+    let tools = tool_directory("whitaker-absent").expect("prepare the tool directory");
     let output = Command::new("make")
         .args(["lint", "CARGO=true"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .env("PATH", system_path)
+        .env("PATH", &tools)
+        .env("HOME", &tools)
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_BUILD_TARGET")
         .env_remove("MAKEFLAGS")
@@ -269,6 +298,6 @@ fn a_missing_whitaker_skips_the_check_and_lint_succeeds() {
     );
     assert!(
         stdout.contains("skipping whitaker lint"),
-        "no skip message in: {stdout}"
+        "no skip message in: {stdout}{stderr}"
     );
 }
