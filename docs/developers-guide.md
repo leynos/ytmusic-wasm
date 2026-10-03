@@ -26,9 +26,12 @@ Development builds follow the estate's Rust build standard, which
 `.cargo/config.toml` sets and Cargo auto-discovers, so a bare `cargo build`
 gets it. Every `rustflags` source enables the parallel `rustc` frontend with
 `-Zthreads=8`, and the `cfg(target_os = "linux")` source also links with
-`mold`; macOS and Windows keep their platform linker. A debug build for a
+`mold`; macOS and Windows keep their platform linker. `make build` for a
 WebAssembly target (`CARGO_BUILD_TARGET` of `wasm32` or `wasm64`) takes LLVM,
-because Cranelift has no WebAssembly target. A Linux host therefore needs
+because Cranelift has no WebAssembly target. Bare Cargo still selects
+Cranelift, so a direct `cargo build --target wasm32-unknown-unknown` must set
+`CARGO_UNSTABLE_CODEGEN_BACKEND=true` and
+`CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` itself. A Linux host therefore needs
 `mold` installed before any `cargo` or `make` build, build scripts included.
 Cranelift is the development-profile codegen backend: the whole suite passes
 under it on the pinned `nightly-2026-03-05`. Coverage holds the development
