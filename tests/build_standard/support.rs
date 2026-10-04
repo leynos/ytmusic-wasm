@@ -106,6 +106,28 @@ pub fn dry_run(target: &str, host: Host, inherited: Option<&str>) -> Read<String
     dry_run_with("make", target, host, inherited)
 }
 
+/// Runs a command, retrying for a bounded time while its program is busy.
+///
+/// A script written moments earlier can still be open for writing in a sibling
+/// test thread's forked child, and executing it then fails with `ETXTBSY`
+/// (`ExecutableFileBusy`) until that child execs. Only that error is retried,
+/// for at most half a second; any other error, or the same one after the
+/// budget, is returned for the caller to name.
+fn output_when_not_busy(command: &mut Command) -> std::io::Result<std::process::Output> {
+    let mut attempts = 0;
+    loop {
+        match command.output() {
+            Err(error)
+                if error.kind() == std::io::ErrorKind::ExecutableFileBusy && attempts < 20 =>
+            {
+                attempts += 1;
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+            result => return result,
+        }
+    }
+}
+
 /// Runs `program` as `make -n` would be run, so a test can point it at a missing
 /// or failing stand-in and see the contract fail closed with a named error.
 ///
@@ -132,8 +154,7 @@ pub fn dry_run_with(
         .env_remove("MFLAGS")
         .env_remove("MAKELEVEL");
     with_inherited(&mut make, inherited);
-    let output = make
-        .output()
+    let output = output_when_not_busy(&mut make)
         .map_err(|error| format!("cannot run `{program} -n {target}` on {host:?}: {error}"))?;
     if !output.status.success() {
         return Err(format!(

@@ -312,6 +312,43 @@ fn fake_program(scratch: &str, script: &str) -> std::path::PathBuf {
         .join("make")
 }
 
+/// A program that is briefly open for writing, as a script is while a sibling
+/// test's forked child still holds its descriptor, is retried instead of failing
+/// the read: the first attempts get `ETXTBSY`, and the run succeeds once the
+/// writer lets go.
+#[cfg(unix)]
+#[test]
+fn a_program_busy_for_writing_is_retried_until_it_is_free() {
+    use cap_std::{
+        ambient_authority,
+        fs::{Dir, OpenOptions, OpenOptionsExt},
+    };
+    let program = fake_program("busy-program", "#!/bin/sh\necho ok\n");
+    let dir = Dir::open_ambient_dir(
+        program.parent().expect("the script has a directory"),
+        ambient_authority(),
+    )
+    .expect("open the scratch directory");
+    let mut options = OpenOptions::new();
+    options.write(true).mode(0o755);
+    let writer = dir
+        .open_with("make", &options)
+        .expect("hold the script open");
+    let release = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        drop(writer);
+    });
+    let output = dry_run_with(
+        program.to_str().expect("a UTF-8 path"),
+        "lint",
+        Host::Linux,
+        None,
+    )
+    .expect("the busy script was never retried to success");
+    release.join().expect("the writer thread");
+    assert_eq!(output.trim(), "ok");
+}
+
 /// A failing program's context, actual status and both streams survive.
 #[cfg(unix)]
 #[test]
