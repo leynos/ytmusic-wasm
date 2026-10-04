@@ -27,12 +27,19 @@ use crate::{
 fn lint_with_script(scratch: &str, script: &str) -> Read<(Output, String)> {
     let root = scratch_with(scratch, &[("whitaker", script)])?;
     let output = lint_command(&root, "true").output()?;
-    let record = recorded(&root, "record")?.ok_or_else(|| {
-        format!(
-            "the fake Whitaker left no record; `make lint` {}",
-            diagnostics(&output)
-        )
-    })?;
+    let record = recorded(&root, "record")
+        .map_err(|error| {
+            format!(
+                "the fake Whitaker's record could not be read ({error}); `make lint` {}",
+                diagnostics(&output)
+            )
+        })?
+        .ok_or_else(|| {
+            format!(
+                "the fake Whitaker left no record; `make lint` {}",
+                diagnostics(&output)
+            )
+        })?;
     Ok((output, record))
 }
 
@@ -146,6 +153,30 @@ fn a_fake_that_leaves_no_record_is_reported_with_its_run() {
     for wanted in [
         "left no record",
         "exit status: 2",
+        "OUT-PAYLOAD",
+        "ERR-PAYLOAD",
+    ] {
+        assert!(
+            message.contains(wanted),
+            "`{wanted}` missing from: {message}"
+        );
+    }
+}
+
+/// A record that exists but cannot be read as text (here a directory) is
+/// reported with the original read error and the run's status and both output
+/// streams, not as a bare I/O error.
+#[test]
+fn an_unreadable_record_is_reported_with_its_run() {
+    let message = lint_with_script(
+        "whitaker-unreadable",
+        "#!/bin/sh\necho OUT-PAYLOAD\necho ERR-PAYLOAD >&2\nmkdir \"$WHITAKER_RECORD\"\nexit 0\n",
+    )
+    .expect_err("the record was a directory")
+    .to_string();
+    for wanted in [
+        "could not be read",
+        "exit status: 0",
         "OUT-PAYLOAD",
         "ERR-PAYLOAD",
     ] {

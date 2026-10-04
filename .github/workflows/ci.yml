@@ -33,6 +33,10 @@ jobs:
           globs: '**/*.md'
       - name: Setup uv
         uses: astral-sh/setup-uv@51fdd265d38a27ffcbca0da885510bc6fcc0ff55
+        with:
+          # A Rust-only repository has no Python dependency manifest for the
+          # cache key, so caching would only warn about unmatched inputs.
+          enable-cache: false
       - name: Install Markdown diagram tooling
         run: |
           uv tool install nixie-cli==1.1.0

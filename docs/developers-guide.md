@@ -35,12 +35,14 @@ Cranelift, so a direct `cargo build --target wasm32-unknown-unknown` must set
 Linux target links with `mold`, so install it before a `cargo` build or a
 `make` development target, build scripts included; `make release` and Make
 builds for a non-Linux target add no `mold`, though a caller's own `RUSTFLAGS`
-may still name it. Cranelift is the development-profile codegen backend: the
-whole suite passes under it on the pinned `nightly-2026-03-05`. The crate has
-no tests of its own yet, so that suite is the build-standard contracts and its
-doctests, which `make test` runs. Coverage holds the development profile on
-LLVM, because `-Cinstrument-coverage` is LLVM-only and the test profile
-inherits the development profile's backend.
+may still name it. Cranelift is the development-profile codegen backend. CI
+runs the suite only through the coverage step, which holds the development
+profile on LLVM, so no CI run shows the suite under Cranelift; `make test` runs
+it there locally. The crate has no tests of its own yet, so the suite is the
+build-standard contracts, and `make test` passes
+`--all-targets --all-features`, which does not run doctests. Coverage is on
+LLVM because `-Cinstrument-coverage` is LLVM-only and the test profile inherits
+the development profile's backend.
 
 Cargo applies a single `rustflags` source rather than merging them, and an
 assigned `RUSTFLAGS` replaces every source. So each source repeats the frontend
