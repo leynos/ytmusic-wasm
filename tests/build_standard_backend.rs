@@ -165,7 +165,19 @@ fn lint_with_fake_whitaker(scratch: &str, whitaker_status: i32) -> Read<(Output,
         })?;
     target_tmp.create_dir(scratch)?;
     let dir = target_tmp.open_dir(scratch)?;
-    let script = format!("#!/bin/sh\nenv > \"$WHITAKER_RECORD\"\nexit {whitaker_status}\n");
+    // Record only the variables the tests read, so an inherited credential
+    // never lands in a test artefact.
+    let script = format!(
+        concat!(
+            "#!/bin/sh\n",
+            "for name in RUSTFLAGS CARGO_UNSTABLE_CODEGEN_BACKEND CARGO_PROFILE_DEV_CODEGEN_BACKEND; do\n",
+            "  eval \"value=\\${{$name-__unset__}}\"\n",
+            "  [ \"$value\" = __unset__ ] || echo \"$name=$value\"\n",
+            "done > \"$WHITAKER_RECORD\"\n",
+            "exit {}\n"
+        ),
+        whitaker_status
+    );
     let mut options = OpenOptions::new();
     options.write(true).create_new(true).mode(0o755);
     std::io::Write::write_all(&mut dir.open_with("whitaker", &options)?, script.as_bytes())?;
@@ -220,7 +232,14 @@ fn lint_succeeds_exactly_when_whitaker_does(#[case] scratch: &str, #[case] statu
 #[cfg(unix)]
 #[test]
 fn whitaker_builds_on_llvm_with_the_composed_flags() {
-    let (_, record) = lint_with_fake_whitaker("whitaker-env", 0).expect("run `make lint`");
+    let (output, record) = lint_with_fake_whitaker("whitaker-env", 0).expect("run `make lint`");
+    assert!(
+        output.status.success(),
+        "`make lint` failed ({}): {}{}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     let value = |name: &str| {
         record
             .lines()
@@ -282,6 +301,7 @@ fn a_missing_whitaker_skips_the_check_and_lint_succeeds() {
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .env("PATH", &tools)
         .env("HOME", &tools)
+        .env("WHITAKER_RECORD", tools.join("record"))
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_BUILD_TARGET")
         .env_remove("MAKEFLAGS")

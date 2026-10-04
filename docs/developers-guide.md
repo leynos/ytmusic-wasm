@@ -31,12 +31,14 @@ WebAssembly target (`CARGO_BUILD_TARGET` of `wasm32` or `wasm64`) takes LLVM,
 because Cranelift has no WebAssembly target. Bare Cargo still selects
 Cranelift, so a direct `cargo build --target wasm32-unknown-unknown` must set
 `CARGO_UNSTABLE_CODEGEN_BACKEND=true` and
-`CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` itself. A Linux host therefore needs
-`mold` installed before any `cargo` or `make` build, build scripts included.
-Cranelift is the development-profile codegen backend: the whole suite passes
-under it on the pinned `nightly-2026-03-05`. Coverage holds the development
-profile on LLVM, because `-Cinstrument-coverage` is LLVM-only and the test
-profile inherits the development profile's backend.
+`CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` itself. A Linux host building for a
+Linux target links with `mold`, so install it before a `cargo` build or a
+`make` development target, build scripts included; `make release` and Make
+builds for a non-Linux target add no `mold`, though a caller's own `RUSTFLAGS`
+may still name it. Cranelift is the development-profile codegen backend: the
+whole suite passes under it on the pinned `nightly-2026-03-05`. Coverage holds
+the development profile on LLVM, because `-Cinstrument-coverage` is LLVM-only
+and the test profile inherits the development profile's backend.
 
 Cargo applies a single `rustflags` source rather than merging them, and an
 assigned `RUSTFLAGS` replaces every source. So each source repeats the frontend
