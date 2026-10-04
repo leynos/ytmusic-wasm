@@ -197,3 +197,29 @@ fn a_native_debug_build_keeps_the_configured_backend() {
         "a native debug build overrides the backend: {native}"
     );
 }
+
+/// Rustdoc denies warnings by default and keeps an inherited `RUSTDOCFLAGS`, so
+/// the lint gate neither relaxes the policy nor clears what the caller exports.
+/// The shell expands the composed value at run time, so the dry run shows it
+/// unexpanded.
+#[test]
+fn rustdoc_denies_warnings_and_composes_the_inherited_flags() {
+    let output = std::process::Command::new("make")
+        .args(["-n", "-B", "lint"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env_remove("MAKEFLAGS")
+        .env_remove("MFLAGS")
+        .env_remove("MAKELEVEL")
+        .output()
+        .expect("run `make -n lint`");
+    let plan = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "`make -n lint` failed: {plan}");
+    let doc_line = plan
+        .lines()
+        .find(|line| line.contains(" doc "))
+        .expect("`make lint` runs no cargo doc");
+    assert!(
+        doc_line.contains("RUSTDOCFLAGS=\"${RUSTDOCFLAGS:+$RUSTDOCFLAGS }-D warnings"),
+        "rustdoc neither composes the inherited flags nor denies warnings: {doc_line}"
+    );
+}

@@ -239,13 +239,13 @@ fn lint_succeeds_exactly_when_whitaker_does(#[case] scratch: &str, #[case] statu
 #[test]
 fn whitaker_builds_on_llvm_with_the_composed_flags() {
     let (output, record) = lint_with_fake_whitaker("whitaker-env", 0).expect("run `make lint`");
-    assert!(
-        output.status.success(),
-        "`make lint` failed ({}): {}{}",
+    let run = format!(
+        "`make lint` exited {}; stdout: {}; stderr: {}; record: {record}",
         output.status,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+    assert!(output.status.success(), "`make lint` failed: {run}");
     let value = |name: &str| {
         record
             .lines()
@@ -254,16 +254,20 @@ fn whitaker_builds_on_llvm_with_the_composed_flags() {
     };
     assert_eq!(
         value("CARGO_UNSTABLE_CODEGEN_BACKEND").as_deref(),
-        Some("true")
+        Some("true"),
+        "the unstable override is wrong: {run}"
     );
     assert_eq!(
         value("CARGO_PROFILE_DEV_CODEGEN_BACKEND").as_deref(),
-        Some("llvm")
+        Some("llvm"),
+        "the backend override is wrong: {run}"
     );
-    let flags = value("RUSTFLAGS").expect("Whitaker received no RUSTFLAGS");
+    let flags = value("RUSTFLAGS");
     assert!(
-        flags.contains("-Zthreads=8"),
-        "Whitaker lost the frontend flag: {flags}"
+        flags
+            .as_deref()
+            .is_some_and(|found| found.contains("-Zthreads=8")),
+        "Whitaker lost the frontend flag: {flags:?}; {run}"
     );
 }
 
@@ -331,10 +335,13 @@ fn a_missing_whitaker_skips_the_check_and_lint_succeeds() {
         stdout.contains("Install whitaker"),
         "no installation guidance in: {stdout}{stderr}"
     );
-    assert!(
-        !tools.join("record").exists(),
-        "a Whitaker run left a record although none is installed"
-    );
+    let tool_dir =
+        Dir::open_ambient_dir(&tools, ambient_authority()).expect("open the tool directory");
+    match tool_dir.metadata("record") {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Ok(_) => panic!("a Whitaker run left a record although none is installed"),
+        Err(error) => panic!("could not check for a record: {error}"),
+    }
 }
 
 /// A fake that runs but writes no record is reported with its run, not read as
@@ -342,10 +349,18 @@ fn a_missing_whitaker_skips_the_check_and_lint_succeeds() {
 #[cfg(unix)]
 #[test]
 fn a_fake_that_leaves_no_record_is_reported_with_its_run() {
-    let message = lint_with_script("whitaker-silent", "#!/bin/sh\nexit 0\n")
-        .expect_err("the fake wrote no record")
-        .to_string();
-    for wanted in ["left no record", "exited", "stdout", "stderr"] {
+    let message = lint_with_script(
+        "whitaker-silent",
+        "#!/bin/sh\necho OUT-PAYLOAD\necho ERR-PAYLOAD >&2\nexit 3\n",
+    )
+    .expect_err("the fake wrote no record")
+    .to_string();
+    for wanted in [
+        "left no record",
+        "exit status: 2",
+        "OUT-PAYLOAD",
+        "ERR-PAYLOAD",
+    ] {
         assert!(
             message.contains(wanted),
             "`{wanted}` missing from: {message}"

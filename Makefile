@@ -5,6 +5,7 @@ TARGET ?= libytmusic_wasm.rlib
 CARGO ?= cargo
 BUILD_JOBS ?=
 RUST_FLAGS ?= -D warnings
+RUSTDOC_FLAGS ?= -D warnings
 # The build standard: every `rustflags` source in `.cargo/config.toml` carries
 # the parallel frontend, and the Linux source adds `mold`. Assigning `RUSTFLAGS`
 # replaces those sources outright, so the targets that assign it restate the
@@ -75,7 +76,7 @@ target/%/$(TARGET): ## Build binary in debug or release mode
 	$(if $(findstring release,$(@)),$(RELEASE_RUSTFLAGS),$(DEBUG_RUSTFLAGS) $(WASM_CODEGEN_BACKEND)) $(CARGO) build $(BUILD_JOBS) $(if $(findstring release,$(@)),--release)
 
 lint: ## Run Clippy and the Whitaker Dylint suite with warnings denied
-	$(GATE_RUSTFLAGS) RUSTDOCFLAGS="$(RUSTDOC_FLAGS)" $(CARGO) doc --no-deps
+	$(GATE_RUSTFLAGS) RUSTDOCFLAGS="$${RUSTDOCFLAGS:+$$RUSTDOCFLAGS }$(RUSTDOC_FLAGS)" $(CARGO) doc --no-deps
 	$(GATE_RUSTFLAGS) $(CARGO) clippy $(CLIPPY_FLAGS)
 	@# `if` rather than `&& ... ||`, so a failing Whitaker run fails the target
 	@# instead of falling through to the not-installed message.
