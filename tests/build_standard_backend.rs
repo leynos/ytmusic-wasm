@@ -153,18 +153,6 @@ fn coverage_builds_on_llvm() {
 /// of them.
 #[cfg(unix)]
 fn lint_with_fake_whitaker(scratch: &str, whitaker_status: i32) -> Read<(Output, String)> {
-    use cap_std::fs::{OpenOptions, OpenOptionsExt};
-
-    let target_tmp = Dir::open_ambient_dir(env!("CARGO_TARGET_TMPDIR"), ambient_authority())?;
-    // A clean directory keeps a record from an earlier run out.
-    target_tmp
-        .remove_dir_all(scratch)
-        .or_else(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => Ok(()),
-            _ => Err(error),
-        })?;
-    target_tmp.create_dir(scratch)?;
-    let dir = target_tmp.open_dir(scratch)?;
     // Record only the variables the tests read, so an inherited credential
     // never lands in a test artefact.
     let script = format!(
@@ -178,6 +166,31 @@ fn lint_with_fake_whitaker(scratch: &str, whitaker_status: i32) -> Read<(Output,
         ),
         whitaker_status
     );
+    lint_with_script(scratch, &script)
+}
+
+/// Runs `make lint` with `script` installed as the fake `whitaker`, returning
+/// the run and the record the script wrote.
+///
+/// # Errors
+///
+/// A script that writes no record is an error carrying the run's status and
+/// both output streams, so a failure to run the fake is never read as an empty
+/// record.
+#[cfg(unix)]
+fn lint_with_script(scratch: &str, script: &str) -> Read<(Output, String)> {
+    use cap_std::fs::{OpenOptions, OpenOptionsExt};
+
+    let target_tmp = Dir::open_ambient_dir(env!("CARGO_TARGET_TMPDIR"), ambient_authority())?;
+    // A clean directory keeps a record from an earlier run out.
+    target_tmp
+        .remove_dir_all(scratch)
+        .or_else(|error| match error.kind() {
+            std::io::ErrorKind::NotFound => Ok(()),
+            _ => Err(error),
+        })?;
+    target_tmp.create_dir(scratch)?;
+    let dir = target_tmp.open_dir(scratch)?;
     let mut options = OpenOptions::new();
     options.write(true).create_new(true).mode(0o755);
     std::io::Write::write_all(&mut dir.open_with("whitaker", &options)?, script.as_bytes())?;
@@ -320,4 +333,28 @@ fn a_missing_whitaker_skips_the_check_and_lint_succeeds() {
         stdout.contains("skipping whitaker lint"),
         "no skip message in: {stdout}{stderr}"
     );
+    assert!(
+        stdout.contains("Install whitaker"),
+        "no installation guidance in: {stdout}{stderr}"
+    );
+    assert!(
+        !tools.join("record").exists(),
+        "a Whitaker run left a record although none is installed"
+    );
+}
+
+/// A fake that runs but writes no record is reported with its run, not read as
+/// an empty record.
+#[cfg(unix)]
+#[test]
+fn a_fake_that_leaves_no_record_is_reported_with_its_run() {
+    let message = lint_with_script("whitaker-silent", "#!/bin/sh\nexit 0\n")
+        .expect_err("the fake wrote no record")
+        .to_string();
+    for wanted in ["left no record", "exited", "stdout", "stderr"] {
+        assert!(
+            message.contains(wanted),
+            "`{wanted}` missing from: {message}"
+        );
+    }
 }
