@@ -284,7 +284,7 @@ fn tool_directory(scratch: &str) -> Read<std::path::PathBuf> {
         })?;
     target_tmp.create_dir(scratch)?;
     let root = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(scratch);
-    for tool in ["sh", "env", "true", "make", "uname"] {
+    for tool in ["sh", "env", "true", "make", "uname", "mkdir", "cat"] {
         let source = ["/usr/bin", "/bin"]
             .iter()
             .map(|base| std::path::Path::new(base).join(tool))
@@ -366,4 +366,151 @@ fn a_fake_that_leaves_no_record_is_reported_with_its_run() {
             "`{wanted}` missing from: {message}"
         );
     }
+}
+
+/// Writes `files` (relative path, contents) into a fresh tool directory and
+/// returns it, so a test can lay out a stand-in `cargo` or a scratch crate.
+#[cfg(unix)]
+fn scratch_with(scratch: &str, files: &[(&str, &str)]) -> Read<std::path::PathBuf> {
+    use cap_std::fs::{OpenOptions, OpenOptionsExt};
+
+    let root = tool_directory(scratch)?;
+    let dir = Dir::open_ambient_dir(&root, ambient_authority())?;
+    for (path, contents) in files {
+        if let Some(parent) = std::path::Path::new(path)
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+        {
+            dir.create_dir_all(parent)?;
+        }
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true).mode(0o755);
+        std::io::Write::write_all(&mut dir.open_with(path, &options)?, contents.as_bytes())?;
+    }
+    Ok(root)
+}
+
+/// The rustdoc flags `make lint` hands `cargo doc` are the default `-D warnings`
+/// alone when the caller exports none, and the caller's value followed by the
+/// default when it does, so the policy never relaxes and inherited flags survive.
+#[cfg(unix)]
+#[rstest]
+#[case::absent("rustdoc-absent", None, "-D warnings")]
+#[case::inherited(
+    "rustdoc-inherited",
+    Some("--cfg docs_marker"),
+    "--cfg docs_marker -D warnings"
+)]
+fn rustdoc_flags_deny_warnings_with_or_without_an_inherited_value(
+    #[case] scratch: &str,
+    #[case] inherited: Option<&str>,
+    #[case] expected: &str,
+) {
+    let script =
+        "#!/bin/sh\n[ \"$1\" = doc ] && printf '%s' \"$RUSTDOCFLAGS\" > \"$RECORD\"\nexit 0\n";
+    let root = scratch_with(scratch, &[("cargo", script)]).expect("lay out the stand-in");
+    let mut make = Command::new("make");
+    make.args([
+        "lint".to_owned(),
+        format!("CARGO={}", root.join("cargo").display()),
+        "WHITAKER=whitaker".to_owned(),
+    ])
+    .current_dir(env!("CARGO_MANIFEST_DIR"))
+    .env("PATH", &root)
+    .env("HOME", &root)
+    .env("RECORD", root.join("rustdoc"))
+    .env_remove("RUSTDOCFLAGS")
+    .env_remove("MAKEFLAGS")
+    .env_remove("MFLAGS")
+    .env_remove("MAKELEVEL");
+    if let Some(flags) = inherited {
+        make.env("RUSTDOCFLAGS", flags);
+    }
+    let output = make.output().expect("run `make lint`");
+    let dir = Dir::open_ambient_dir(&root, ambient_authority()).expect("open the scratch root");
+    let recorded = dir.read_to_string("rustdoc").unwrap_or_else(|error| {
+        panic!(
+            "no rustdoc record ({error}); `make lint` exited {}: {}{}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        )
+    });
+    assert_eq!(recorded, expected);
+}
+
+/// Runs the repository's own `make lint` over a scratch crate with the real
+/// toolchain, and returns whether it passed.
+#[cfg(unix)]
+fn lint_scratch_crate(scratch: &str, library: &str) -> Read<(bool, String)> {
+    let manifest = "[package]\nname = \"scratch_doc\"\nversion = \"0.0.0\"\nedition = \"2021\"\n";
+    let root = scratch_with(
+        scratch,
+        &[("Cargo.toml", manifest), ("src/lib.rs", library)],
+    )?;
+    let makefile = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Makefile");
+    let output = Command::new("make")
+        .args([
+            "-C".to_owned(),
+            root.display().to_string(),
+            "-f".to_owned(),
+            makefile.display().to_string(),
+            "lint".to_owned(),
+            format!("CARGO={}", env!("CARGO")),
+            "WHITAKER=whitaker".to_owned(),
+        ])
+        // The scratch tools, then the toolchain's own directory, where cargo
+        // finds the `rustc` and `rustdoc` it needs.
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                root.display(),
+                std::path::Path::new(env!("CARGO"))
+                    .parent()
+                    .map_or(String::new(), |dir| dir.display().to_string())
+            ),
+        )
+        .env("HOME", &root)
+        .env_remove("RUSTFLAGS")
+        .env_remove("RUSTDOCFLAGS")
+        .env_remove("CARGO_TARGET_DIR")
+        .env_remove("CARGO_BUILD_BUILD_DIR")
+        .env_remove("CARGO_BUILD_TARGET")
+        // A compiler wrapper from the caller's environment may need tools this
+        // run's `PATH` does not hold, and is not what is under test.
+        .env_remove("RUSTC_WRAPPER")
+        .env_remove("RUSTC_WORKSPACE_WRAPPER")
+        .env_remove("CARGO_BUILD_RUSTC_WRAPPER")
+        .env_remove("MAKEFLAGS")
+        .env_remove("MFLAGS")
+        .env_remove("MAKELEVEL")
+        .output()?;
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok((output.status.success(), text))
+}
+
+/// One real rustdoc warning in a scratch crate fails `make lint`, and the same
+/// crate without it passes, so the default `-D warnings` is doing the work.
+#[cfg(unix)]
+#[test]
+fn a_real_rustdoc_warning_fails_the_lint_gate() {
+    let clean = "//! Scratch crate.\n\n/// A documented function.\npub fn documented() {}\n";
+    let (clean_passed, clean_text) =
+        lint_scratch_crate("rustdoc-clean-crate", clean).expect("lint the clean crate");
+    assert!(
+        clean_passed,
+        "the clean scratch crate failed `make lint`: {clean_text}"
+    );
+    let warned = "//! Scratch crate.\n\n/// See [`nowhere::missing`].\npub fn documented() {}\n";
+    let (passed, text) =
+        lint_scratch_crate("rustdoc-warned-crate", warned).expect("lint the warned crate");
+    assert!(
+        !passed,
+        "a broken intra-doc link did not fail `make lint`: {text}"
+    );
 }
