@@ -181,27 +181,20 @@ fn lint_with_fake_whitaker(scratch: &str, whitaker_status: i32) -> Read<(Output,
 fn lint_with_script(scratch: &str, script: &str) -> Read<(Output, String)> {
     use cap_std::fs::{OpenOptions, OpenOptionsExt};
 
-    let target_tmp = Dir::open_ambient_dir(env!("CARGO_TARGET_TMPDIR"), ambient_authority())?;
-    // A clean directory keeps a record from an earlier run out.
-    target_tmp
-        .remove_dir_all(scratch)
-        .or_else(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => Ok(()),
-            _ => Err(error),
-        })?;
-    target_tmp.create_dir(scratch)?;
-    let dir = target_tmp.open_dir(scratch)?;
+    // The tool directory is rebuilt clean, so a record from an earlier run
+    // cannot survive, and it holds the only tools on `PATH`.
+    let root = tool_directory(scratch)?;
+    let dir = Dir::open_ambient_dir(&root, ambient_authority())?;
     let mut options = OpenOptions::new();
     options.write(true).create_new(true).mode(0o755);
     std::io::Write::write_all(&mut dir.open_with("whitaker", &options)?, script.as_bytes())?;
-    let root = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join(scratch);
-    // A fixed PATH keeps the run hermetic: the fake first, then the system
-    // directories that hold `sh`, `env` and the `true` standing in for cargo.
-    let path = format!("{}:/usr/bin:/bin", root.display());
     let output = Command::new("make")
-        .args(["lint", "CARGO=true"])
+        // `WHITAKER=whitaker` beats an inherited `WHITAKER`, which the bogus
+        // value below would otherwise make the recipe run.
+        .args(["lint", "CARGO=true", "WHITAKER=whitaker"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .env("PATH", path)
+        .env("PATH", &root)
+        .env("WHITAKER", "/no/such/whitaker")
         .env("WHITAKER_RECORD", root.join("record"))
         // The Makefile searches `$HOME`-relative tool directories too, so point
         // it at the scratch directory rather than a real home.
@@ -310,8 +303,9 @@ fn tool_directory(scratch: &str) -> Read<std::path::PathBuf> {
 fn a_missing_whitaker_skips_the_check_and_lint_succeeds() {
     let tools = tool_directory("whitaker-absent").expect("prepare the tool directory");
     let output = Command::new("make")
-        .args(["lint", "CARGO=true"])
+        .args(["lint", "CARGO=true", "WHITAKER=whitaker"])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("WHITAKER", "/no/such/whitaker")
         .env("PATH", &tools)
         .env("HOME", &tools)
         .env("WHITAKER_RECORD", tools.join("record"))
