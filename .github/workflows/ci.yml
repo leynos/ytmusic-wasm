@@ -56,7 +56,7 @@ jobs:
       - name: Lint
         run: make lint
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@0606ca899ce2995a0c4bc78e660e80832e6e8855
+        uses: leynos/shared-actions/.github/actions/generate-coverage@d0c2585d9e144775e4ec9fe26e7eeb03c14844dd
         env:
           # The development profile selects Cranelift, which cannot build
           # `-Cinstrument-coverage`; the test profile inherits it. The
