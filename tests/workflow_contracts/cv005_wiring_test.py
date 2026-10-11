@@ -89,11 +89,13 @@ def test_ci_runs_the_target_unconditionally() -> None:
         (job, step)
         for job in workflow["jobs"].values()
         for step in job.get("steps", [])
-        if f"make {TARGET}" in str(step.get("run", ""))
+        if str(step.get("run", "")).strip() == f"make {TARGET}"
     ]
     assert runs, f"ci.yml must run `make {TARGET}` in a step"
     assert all("if" not in step for _, step in runs), runs
     assert all("if" not in job for job, _ in runs), "the job carries an `if`"
+    assert not any(step.get("continue-on-error") for _, step in runs), runs
+    assert not any(job.get("continue-on-error") for job, _ in runs), runs
 
 
 def test_both_contract_runs_use_the_configured_uv() -> None:

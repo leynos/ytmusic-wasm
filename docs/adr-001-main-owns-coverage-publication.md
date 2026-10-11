@@ -34,7 +34,8 @@ shape.
 ## Consequences
 
 - A merge that fires no push event (a Dependabot pull request merged with
-  `GITHUB_TOKEN`) publishes nothing until the next push to `main`.
+  `GITHUB_TOKEN`) publishes nothing until the next push to `main` or a manual
+  `workflow_dispatch` run.
 - The concurrency group stops runs overlapping but does not order them by
   commit; a manual re-run of an older run republishes that commit's coverage
   until the next push.

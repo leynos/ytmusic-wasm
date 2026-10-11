@@ -105,5 +105,5 @@ change, never a silent upgrade), then the local wiring tests in
 `UV` and `UV_ENV`, so a `uv` outside `PATH` can be injected. `make all` and CI
 run the target; `.github/cv005.toml` holds the repository name and nothing
 else. A Dependabot pull request merged by the automerge workflow fires no push
-event, so that merge publishes nothing until the next push to `main`
-(shared-actions #518 tracks the fix).
+event, so that merge publishes nothing until the next push to `main` or a manual
+`workflow_dispatch` run (shared-actions #518 tracks the fix).
