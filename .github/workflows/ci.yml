@@ -55,8 +55,10 @@ jobs:
           sudo apt-get install --yes --no-install-recommends mold
       - name: Lint
         run: make lint
+      - name: Workflow contract tests
+        run: make test-workflow-contracts
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@b59d7d13d29636cc9f0c33a81ba17a9a2bde9bb8
+        uses: leynos/shared-actions/.github/actions/generate-coverage@cabf105ae230e3759cf77b1c2d1d73ea0b67e9a9
         env:
           # The development profile selects Cranelift, which cannot build
           # `-Cinstrument-coverage`; the test profile inherits it. The
@@ -68,12 +70,9 @@ jobs:
         with:
           output-path: lcov.info
           format: lcov
-      - name: Upload coverage data to CodeScene
-        env:
-          CS_ACCESS_TOKEN: ${{ secrets.CS_ACCESS_TOKEN }}
-        if: ${{ env.CS_ACCESS_TOKEN }}
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@b59d7d13d29636cc9f0c33a81ba17a9a2bde9bb8
-        with:
-          format: lcov
-          access-token: ${{ env.CS_ACCESS_TOKEN }}
-          installer-checksum: ${{ vars.CODESCENE_CLI_SHA256 }}
+          # The pull request measures coverage for its own ratchet check and
+          # nothing else: it neither publishes the report nor contacts
+          # CodeScene. Main owns both, in coverage-main.yml, and
+          # `make test-workflow-contracts` holds the split.
+          with-ratchet: 'true'
+          publish-artefact: 'false'
