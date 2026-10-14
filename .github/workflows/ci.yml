@@ -16,13 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@aea9c14c24b73042e99f0be8245a4f171b67c31a
+        uses: leynos/shared-actions/.github/actions/setup-rust@e693d81d176d2305e2b736a0be0f9038085dec7f
         with:
           expect-cache: any
       - name: Install mdtablefix
         # `make check-fmt` runs `mdtablefix --check --git`; 0.6.0 is the
         # first release with `--check` and `--git`.
-        uses: leynos/shared-actions/.github/actions/install-mdtablefix@aea9c14c24b73042e99f0be8245a4f171b67c31a
+        uses: leynos/shared-actions/.github/actions/install-mdtablefix@e693d81d176d2305e2b736a0be0f9038085dec7f
         with:
           version: "0.6.1"
       - name: Format
@@ -46,7 +46,7 @@ jobs:
       - name: Mermaid diagrams
         run: make nixie
       - name: Install Whitaker Dylint suite
-        uses: leynos/shared-actions/.github/actions/install-whitaker@aea9c14c24b73042e99f0be8245a4f171b67c31a
+        uses: leynos/shared-actions/.github/actions/install-whitaker@e693d81d176d2305e2b736a0be0f9038085dec7f
       - name: Install mold linker
         # The Makefile restates the build standard's `mold` flag for its
         # gate targets, so the linker must be present before they build.
@@ -58,7 +58,7 @@ jobs:
       - name: Workflow contract tests
         run: make test-workflow-contracts
       - name: Test and Measure Coverage
-        uses: leynos/shared-actions/.github/actions/generate-coverage@aea9c14c24b73042e99f0be8245a4f171b67c31a
+        uses: leynos/shared-actions/.github/actions/generate-coverage@e693d81d176d2305e2b736a0be0f9038085dec7f
         env:
           # The development profile selects Cranelift, which cannot build
           # `-Cinstrument-coverage`; the test profile inherits it. The
