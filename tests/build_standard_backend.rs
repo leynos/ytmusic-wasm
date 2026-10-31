@@ -117,8 +117,7 @@ fn coverage_step(workflow: &str) -> Vec<&str> {
         });
     bounds
         .and_then(|range| lines.get(range))
-        .map(<[&str]>::to_vec)
-        .unwrap_or_default()
+        .map_or_else(Vec::new, <[&str]>::to_vec)
 }
 
 #[test]
