@@ -15,6 +15,9 @@
 
 [unstable]
 codegen-backend = true
+# The dev-build footprint standard (DF-003): from `nightly-2026-07-31` the
+# native key keeps metadata out of the rlibs, replacing `no-embed-metadata`.
+embed-metadata = false
 
 [profile.dev]
 codegen-backend = "cranelift"

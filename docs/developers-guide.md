@@ -48,6 +48,12 @@ build-standard contracts, and `make test` passes
 LLVM because `-Cinstrument-coverage` is LLVM-only and the test profile inherits
 the development profile's backend.
 
+The development profile also follows the dev-build footprint standard: it sets
+`incremental = false` and `debug = 0`, and `.cargo/config.toml` sets the native
+Cargo key `[unstable] embed-metadata = false`, which `nightly-2026-07-31` and
+later pins use to keep metadata out of build artefacts. Do not replace it with
+a raw `rustc` metadata flag; those broke build scripts.
+
 Cargo applies a single `rustflags` source rather than merging them, and an
 assigned `RUSTFLAGS` replaces every source. So each source repeats the frontend
 flag, and the Makefile restates both flags as `STANDARD_RUSTFLAGS` for the
