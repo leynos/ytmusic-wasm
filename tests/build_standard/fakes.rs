@@ -68,13 +68,20 @@ pub fn scratch_with(scratch: &str, files: &[(&str, &str)]) -> Read<PathBuf> {
 /// argument must beat.
 pub fn lint_command(root: &Path, cargo: &str) -> Command {
     let mut make = Command::new("make");
-    make.args(["lint", &format!("CARGO={cargo}"), "WHITAKER=whitaker"])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .env("PATH", root)
-        .env("HOME", root)
-        .env("WHITAKER", "/no/such/whitaker")
-        .env("WHITAKER_RECORD", root.join("record"))
-        .env("LOG", root.join("log"));
+    // `INTERROGATE=true` replaces the Interrogate command, because `uv` is not
+    // on this fake `PATH`.
+    make.args([
+        "lint",
+        &format!("CARGO={cargo}"),
+        "WHITAKER=whitaker",
+        "INTERROGATE=true",
+    ])
+    .current_dir(env!("CARGO_MANIFEST_DIR"))
+    .env("PATH", root)
+    .env("HOME", root)
+    .env("WHITAKER", "/no/such/whitaker")
+    .env("WHITAKER_RECORD", root.join("record"))
+    .env("LOG", root.join("log"));
     for name in [
         "RUSTFLAGS",
         "RUSTDOCFLAGS",
