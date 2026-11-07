@@ -90,7 +90,8 @@ target/%/$(TARGET): ## Build binary in debug or release mode
 INTERROGATE_VERSION ?= 1.7.0
 INTERROGATE_TARGETS ?= tests
 # Level 2 prints a MISSED row per undocumented definition, which the
-# `interrogate` target fails on: the rounded percentage alone can pass a lone gap.
+# `interrogate` recipe below looks for: the rounded percentage alone can pass a
+# lone gap.
 INTERROGATE_FLAGS ?= -vv --fail-under 100
 INTERROGATE ?= $(UV_ENV) $(UV) tool run --python 3.13 --from 'interrogate==$(INTERROGATE_VERSION)' interrogate
 
