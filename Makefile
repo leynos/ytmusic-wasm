@@ -95,7 +95,8 @@ INTERROGATE_FLAGS ?= -vv --fail-under 100
 INTERROGATE ?= $(UV_ENV) $(UV) tool run --python 3.13 --from 'interrogate==$(INTERROGATE_VERSION)' interrogate
 
 # Interrogate rounds its percentage to one decimal, so `--fail-under 100` alone
-# can pass a lone gap in a large repository; fail on any MISSED row as well.
+# can pass a lone gap in a large repository; also fail when the report (which
+# needs `-vv` and standard output) holds a MISSED row.
 .PHONY: interrogate
 interrogate: ## Enforce complete Python docstring coverage
 	@report="$$($(INTERROGATE) $(INTERROGATE_FLAGS) $(INTERROGATE_TARGETS))"; \

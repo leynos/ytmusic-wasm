@@ -68,8 +68,8 @@ pub fn scratch_with(scratch: &str, files: &[(&str, &str)]) -> Read<PathBuf> {
 /// argument must beat.
 pub fn lint_command(root: &Path, cargo: &str) -> Command {
     let mut make = Command::new("make");
-    // `INTERROGATE=true` stubs the docstring gate, which needs `uv` outside this
-    // fake `PATH` and has its own coverage in `make interrogate`.
+    // `INTERROGATE=true` replaces the Interrogate command, because `uv` is not
+    // on this fake `PATH`.
     make.args([
         "lint",
         &format!("CARGO={cargo}"),
