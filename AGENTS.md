@@ -228,9 +228,10 @@ project:
     `cargo clippy --all-targets --all-features -- -D warnings`, and
     `whitaker --all -- --all-targets --all-features`. The Whitaker step prints
     a skip message when `whitaker` is not on `PATH`. The cargo steps compose the
-    caller's `RUSTFLAGS` with `-D warnings`, `-Zthreads=8`, and, on Linux,
-    `-Clink-arg=-fuse-ld=mold` for the `mold` linker. Documentation warnings,
-    Clippy warnings, and Whitaker findings fail the command.
+    caller's `RUSTFLAGS` with `-D warnings`, `-Zthreads=8`, and
+    `-Clink-arg=-fuse-ld=mold` for the `mold` linker, the last only when the
+    build host and the compilation target are both Linux. Documentation
+    warnings, Clippy warnings, and Whitaker findings fail the command.
   - `make test` executes:
 
     ```sh
@@ -239,8 +240,9 @@ project:
 
     with the same composed `RUSTFLAGS`. The flags are the Makefile defaults
     (`CARGO_FLAGS`, which `TEST_FLAGS` inherits, and both may be overridden).
-    Use `make fmt` (`cargo fmt --all`, which also rewrites Markdown tables and
-    wrapping) to apply formatting fixes reported by the formatter check.
+    Use `make fmt`, which runs `cargo fmt --all`, `mdtablefix`, and
+    `markdownlint-cli2 --fix`, to apply formatting fixes reported by the
+    formatter check.
 - Clippy warnings MUST be disallowed.
 - Fix any warnings emitted during tests in the code itself rather than
   silencing them.
