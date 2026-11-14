@@ -33,16 +33,16 @@ gets it. Every `rustflags` source enables the parallel `rustc` frontend with
 `mold`; macOS and Windows keep their platform linker. `make build` for a
 WebAssembly target (`CARGO_BUILD_TARGET` of `wasm32` or `wasm64`) takes LLVM,
 because Cranelift has no WebAssembly target. A direct
-`cargo build --target wasm32-unknown-unknown` is safe only while Cranelift is
-not opted in, or an inherited `CARGO_PROFILE_DEV_CODEGEN_BACKEND` selects it;
-set `CARGO_UNSTABLE_CODEGEN_BACKEND=true` and
-`CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` to be sure. A Linux host building for
-a Linux target links with `mold`, so install it before a `cargo` build or a
-`make` development target, build scripts included; `make release` and Make
-builds for a non-Linux target add no `mold`, though a caller's own `RUSTFLAGS`
-may still name it. The estate standard is LLVM, the default codegen backend;
-the Cranelift selection in `.cargo/config.toml` is commented out, with review
-due 14 May 2027 (see the concordat decision record,
+`cargo build --target wasm32-unknown-unknown` takes LLVM by default, but an
+opt-in or an inherited `CARGO_PROFILE_DEV_CODEGEN_BACKEND` can select
+Cranelift; set `CARGO_UNSTABLE_CODEGEN_BACKEND=true` and
+`CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` to be sure of LLVM. A Linux host
+building for a Linux target links with `mold`, so install it before a `cargo`
+build or a `make` development target, build scripts included; `make release`
+and Make builds for a non-Linux target add no `mold`, though a caller's own
+`RUSTFLAGS` may still name it. The estate standard is LLVM, the default codegen
+backend; the Cranelift selection in `.cargo/config.toml` is commented out, with
+review due 14 May 2027 (see the concordat decision record,
 [adr-0004](https://github.com/leynos/concordat/blob/main/docs/adrs/adr-0004-cranelift-is-not-part-of-the-rust-build-standard.md)).
 To opt in, pass `--config 'profile.dev.codegen-backend="cranelift"'`;
 Cranelift does not unwind, so no test may rely on a caught panic under it. An
