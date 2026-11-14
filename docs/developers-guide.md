@@ -44,13 +44,15 @@ and Make builds for a non-Linux target add no `mold`, though a caller's own
 backend; the Cranelift selection in `.cargo/config.toml` is commented out, with
 review due 14 May 2027 (see the concordat decision record,
 [adr-0004](https://github.com/leynos/concordat/blob/main/docs/adrs/adr-0004-cranelift-is-not-part-of-the-rust-build-standard.md)).
-To opt in, pass `--config 'profile.dev.codegen-backend="cranelift"'`;
-Cranelift does not unwind, so no test may rely on a caught panic under it. An
-inherited `CARGO_PROFILE_*_CODEGEN_BACKEND` can still select it. The crate has
-no tests of its own yet, so the suite is the build-standard contracts, and
-`make test` passes `--all-targets --all-features`, which does not run doctests.
-Coverage is on LLVM because `-Cinstrument-coverage` is LLVM-only and the test
-profile inherits the development profile's backend.
+Uncommenting the selection is a persistent opt-in and must come with an update
+to the contract in `tests/build_standard_backend.rs`. For a one-off opt-in, pass
+`--config 'profile.dev.codegen-backend="cranelift"'`; Cranelift does not
+unwind, so no test may rely on a caught panic under it. An inherited
+`CARGO_PROFILE_*_CODEGEN_BACKEND` can still select it. The crate has no tests
+of its own yet, so the suite is the build-standard contracts, and `make test`
+passes `--all-targets --all-features`, which does not run doctests. Coverage is
+on LLVM because `-Cinstrument-coverage` is LLVM-only and the test profile
+inherits the development profile's backend.
 
 The development profile also follows the dev-build footprint standard: it sets
 `incremental = false` and `debug = 0`, and `.cargo/config.toml` sets the native

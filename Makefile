@@ -35,7 +35,7 @@ DEBUG_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(STANDARD_RUSTFLAGS)"
 # warning policy and the standard flags in one place.
 GATE_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }$(RUST_FLAGS) $(STANDARD_RUSTFLAGS)"
 # Whitaker's Dylint driver runs on its own pinned toolchain, which need not
-# carry the Cranelift component the development profile selects, so its
+# carry the Cranelift component an opt-in selection needs, so its
 # check builds take LLVM. Dylint builds its driver in a crate outside this
 # repository, which the `[unstable]` table does not reach, so the override
 # also enables the unstable key there.
