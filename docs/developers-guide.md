@@ -32,21 +32,25 @@ gets it. Every `rustflags` source enables the parallel `rustc` frontend with
 `-Zthreads=8`, and the `cfg(target_os = "linux")` source also links with
 `mold`; macOS and Windows keep their platform linker. `make build` for a
 WebAssembly target (`CARGO_BUILD_TARGET` of `wasm32` or `wasm64`) takes LLVM,
-because Cranelift has no WebAssembly target. Bare Cargo still selects
-Cranelift, so a direct `cargo build --target wasm32-unknown-unknown` must set
-`CARGO_UNSTABLE_CODEGEN_BACKEND=true` and
-`CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` itself. A Linux host building for a
-Linux target links with `mold`, so install it before a `cargo` build or a
+because Cranelift has no WebAssembly target. A direct
+`cargo build --target wasm32-unknown-unknown` is safe only while Cranelift is
+not opted in, or an inherited `CARGO_PROFILE_DEV_CODEGEN_BACKEND` selects it;
+set `CARGO_UNSTABLE_CODEGEN_BACKEND=true` and
+`CARGO_PROFILE_DEV_CODEGEN_BACKEND=llvm` to be sure. A Linux host building for
+a Linux target links with `mold`, so install it before a `cargo` build or a
 `make` development target, build scripts included; `make release` and Make
 builds for a non-Linux target add no `mold`, though a caller's own `RUSTFLAGS`
-may still name it. Cranelift is the development-profile codegen backend. CI
-runs the suite only through the coverage step, which holds the development
-profile on LLVM, so no CI run shows the suite under Cranelift; `make test` runs
-it there locally. The crate has no tests of its own yet, so the suite is the
-build-standard contracts, and `make test` passes
-`--all-targets --all-features`, which does not run doctests. Coverage is on
-LLVM because `-Cinstrument-coverage` is LLVM-only and the test profile inherits
-the development profile's backend.
+may still name it. The estate standard is LLVM, the default codegen backend;
+the Cranelift selection in `.cargo/config.toml` is commented out, with review
+due 14 May 2027 (see the concordat decision record,
+[adr-0004](https://github.com/leynos/concordat/blob/main/docs/adrs/adr-0004-cranelift-is-not-part-of-the-rust-build-standard.md)).
+To opt in, pass `--config 'profile.dev.codegen-backend="cranelift"'`;
+Cranelift does not unwind, so no test may rely on a caught panic under it. An
+inherited `CARGO_PROFILE_*_CODEGEN_BACKEND` can still select it. The crate has
+no tests of its own yet, so the suite is the build-standard contracts, and
+`make test` passes `--all-targets --all-features`, which does not run doctests.
+Coverage is on LLVM because `-Cinstrument-coverage` is LLVM-only and the test
+profile inherits the development profile's backend.
 
 The development profile also follows the dev-build footprint standard: it sets
 `incremental = false` and `debug = 0`, and `.cargo/config.toml` sets the native
