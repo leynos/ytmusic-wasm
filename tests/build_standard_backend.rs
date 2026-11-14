@@ -1,9 +1,10 @@
 //! Contract tests for the build standard's code-generation backend.
 //!
-//! The standard makes Cranelift the development profile's backend, which needs
-//! the unstable Cargo key and the toolchain component. Two builds must not use
-//! it: coverage, because Cranelift cannot build `-Cinstrument-coverage`, and
-//! Whitaker's Dylint driver, which builds outside the workspace configuration.
+//! The estate standard is LLVM; the Cranelift selection is disabled, and the
+//! unstable Cargo key and the toolchain component stay so it can be opted into.
+//! Two builds must not use it: coverage, because Cranelift cannot build
+//! `-Cinstrument-coverage`, and Whitaker's Dylint driver, which builds outside
+//! the workspace configuration.
 //! These tests hold the configuration, the coverage step's overrides and the
 //! `make lint` Whitaker boundary, which the flag contract does not reach.
 //!
@@ -52,18 +53,22 @@ fn value_at<'a>(root: &'a toml::Value, path: &[&str]) -> Option<&'a toml::Value>
 }
 
 #[test]
-fn cranelift_is_the_development_backend() {
+fn cranelift_is_available_but_not_the_development_default() {
     let config = read_toml(".cargo/config.toml").expect("read the Cargo configuration");
     assert_eq!(
         value_at(&config, &["unstable", "codegen-backend"]).and_then(toml::Value::as_bool),
         Some(true),
         "`[unstable] codegen-backend = true` is what lets Cargo accept the profile key"
     );
-    assert_eq!(
-        value_at(&config, &["profile", "dev", "codegen-backend"]).and_then(toml::Value::as_str),
-        Some("cranelift"),
-        "the development profile no longer selects Cranelift"
-    );
+    for source in [".cargo/config.toml", "Cargo.toml"] {
+        let document = read_toml(source).expect("read the Cargo configuration source");
+        let dev_backend = value_at(&document, &["profile", "dev", "codegen-backend"]);
+        assert!(
+            dev_backend.is_none() || dev_backend.and_then(toml::Value::as_str) == Some("llvm"),
+            "{source}: the development profile must leave the backend unset or select LLVM, \
+             found {dev_backend:?}"
+        );
+    }
     let toolchain = read_toml("rust-toolchain.toml").expect("read the toolchain file");
     let has_component = value_at(&toolchain, &["toolchain", "components"])
         .and_then(toml::Value::as_array)

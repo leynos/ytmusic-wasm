@@ -1,6 +1,6 @@
 # Repository-wide Cargo defaults for the development build standard.
 #
-# Cranelift is the development-profile backend.
+# LLVM is the default backend; the Cranelift selection is disabled below.
 # The parallel `rustc` frontend is the default for every build, and
 # the `mold` linker is the default on Linux. Cargo auto-discovers this file, so
 # a bare `cargo build` gets them. `make release` and coverage assign
@@ -19,8 +19,9 @@ codegen-backend = true
 # native key keeps metadata out of the rlibs, replacing `no-embed-metadata`.
 embed-metadata = false
 
-[profile.dev]
-codegen-backend = "cranelift"
+# Cranelift disabled estate-wide on 14 November 2026 (concordat ADR; review 14 May 2027). Uncomment to opt back in.
+# [profile.dev]
+# codegen-backend = "cranelift"
 
 [build]
 rustflags = ["-Zthreads=8"]

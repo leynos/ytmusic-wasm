@@ -60,7 +60,7 @@ jobs:
       - name: Test and Measure Coverage
         uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         env:
-          # The development profile selects Cranelift, which cannot build
+          # An opted-in or inherited Cranelift selection cannot build
           # `-Cinstrument-coverage`; the test profile inherits it. The
           # action's own `cargo install` runs outside the workspace
           # configuration, so it needs the unstable feature from the
