@@ -60,11 +60,15 @@ fn cranelift_is_available_but_not_the_development_default() {
         Some(true),
         "`[unstable] codegen-backend = true` is what lets Cargo accept the profile key"
     );
-    let dev_backend = value_at(&config, &["profile", "dev", "codegen-backend"]);
-    assert!(
-        dev_backend.is_none() || dev_backend.and_then(toml::Value::as_str) == Some("llvm"),
-        "the development profile must leave the backend unset or select LLVM, found {dev_backend:?}"
-    );
+    for source in [".cargo/config.toml", "Cargo.toml"] {
+        let document = read_toml(source).expect("read the Cargo configuration source");
+        let dev_backend = value_at(&document, &["profile", "dev", "codegen-backend"]);
+        assert!(
+            dev_backend.is_none() || dev_backend.and_then(toml::Value::as_str) == Some("llvm"),
+            "{source}: the development profile must leave the backend unset or select LLVM, \
+             found {dev_backend:?}"
+        );
+    }
     let toolchain = read_toml("rust-toolchain.toml").expect("read the toolchain file");
     let has_component = value_at(&toolchain, &["toolchain", "components"])
         .and_then(toml::Value::as_array)
