@@ -180,21 +180,36 @@ pub fn config() -> Read<toml::Value> {
 /// Returns every `rustflags` source in the configuration, by table name.
 pub fn sources() -> Read<Vec<(String, Flags)>> {
     let config = config()?;
+    let mut found = build_source(&config)?;
+    found.extend(target_sources(&config)?);
+    Ok(found)
+}
+
+/// Returns the `[build]` table's flags as a single named source, if it has any.
+fn build_source(config: &toml::Value) -> Read<Vec<(String, Flags)>> {
+    let Some(table) = config.get("build") else {
+        return Ok(Vec::new());
+    };
+    let source = Source {
+        key: "build",
+        table,
+    };
+    Ok(source
+        .flags()?
+        .map(|found| ("build".to_owned(), found))
+        .into_iter()
+        .collect())
+}
+
+/// Returns each `[target.*]` table's flags as named sources, in table order.
+fn target_sources(config: &toml::Value) -> Read<Vec<(String, Flags)>> {
+    let Some(targets) = config.get("target").and_then(toml::Value::as_table) else {
+        return Ok(Vec::new());
+    };
     let mut found = Vec::new();
-    if let Some(table) = config.get("build") {
-        let source = Source {
-            key: "build",
-            table,
-        };
-        if let Some(flags) = source.flags()? {
-            found.push(("build".to_owned(), flags));
-        }
-    }
-    if let Some(targets) = config.get("target").and_then(toml::Value::as_table) {
-        for (key, table) in targets {
-            if let Some(flags) = (Source { key, table }).flags()? {
-                found.push((key.clone(), flags));
-            }
+    for (key, table) in targets {
+        if let Some(flags) = (Source { key, table }).flags()? {
+            found.push((key.clone(), flags));
         }
     }
     Ok(found)
