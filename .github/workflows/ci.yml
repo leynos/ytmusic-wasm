@@ -57,6 +57,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends mold
+      - name: Install the YAML lint tools
+        uses: leynos/shared-actions/.github/actions/install-yaml-lint@0eabb6bc07148981de5da395e30cd78d83f5c7c2
       - name: Lint
         run: make lint
       - name: Workflow contract tests
