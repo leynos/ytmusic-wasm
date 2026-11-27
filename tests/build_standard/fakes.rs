@@ -69,8 +69,14 @@ pub fn scratch_with(scratch: &str, files: &[(&str, &str)]) -> Read<PathBuf> {
 pub fn lint_command(root: &Path, cargo: &str) -> Command {
     let mut make = Command::new("make");
     // `INTERROGATE=true` replaces the Interrogate command, because `uv` is not
-    // on this fake `PATH`.
+    // on this fake `PATH`. The YAML lint prerequisites need `bash`, `git`,
+    // `xargs` and the linters, none of which this `PATH` holds, and they are not
+    // under test: `-o` tells Make to treat both targets as up to date.
     make.args([
+        "-o",
+        "yamllint",
+        "-o",
+        "actionlint",
         "lint",
         &format!("CARGO={cargo}"),
         "WHITAKER=whitaker",
