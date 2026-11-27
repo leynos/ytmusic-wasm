@@ -110,7 +110,7 @@ interrogate: ## Enforce complete Python docstring coverage
 	    exit 1; \
 	  fi
 
-lint: ## Run Clippy, the Whitaker Dylint suite and the docstring gate
+lint: yamllint actionlint ## Run Clippy, the Whitaker Dylint suite and the docstring gate
 	$(MAKE) --no-print-directory interrogate
 	$(GATE_RUSTFLAGS) RUSTDOCFLAGS="$${RUSTDOCFLAGS:+$$RUSTDOCFLAGS }$(RUSTDOC_FLAGS)" $(CARGO) doc --no-deps
 	$(GATE_RUSTFLAGS) $(CARGO) clippy $(CLIPPY_FLAGS)
@@ -147,3 +147,18 @@ help: ## Show available targets
 test-workflow-contracts: ## Validate the CodeScene coverage workflow contract (CV-005)
 	$(CV005_CONTRACTS) check --repository .
 	$(UV_ENV) $(UV) run --python 3.13 --with 'pytest>=8,<10' --with 'pyyaml>=6,<7' pytest tests/workflow_contracts -q
+
+YAMLLINT ?= yamllint
+ACTIONLINT ?= actionlint
+
+.PHONY: yamllint actionlint
+
+# yamllint reads `.yamllint.yml`, which extends `.yamllint-estate.yml`, and
+# resolves that path against the current directory, so run it from the root.
+yamllint: SHELL := bash
+yamllint: .SHELLFLAGS := -eo pipefail -c
+yamllint: ## Lint every tracked YAML file strictly
+	git ls-files -z '*.yml' '*.yaml' | xargs -0 -r $(YAMLLINT) --strict --
+
+actionlint: ## Lint the GitHub Actions workflows, including their shell scripts
+	$(ACTIONLINT)
