@@ -121,12 +121,24 @@ and the run still succeeds.
 `CV005_CONTRACTS_REF` in the `Makefile` (a bump of that pin is a reviewed
 change, never a silent upgrade), then the local wiring tests in
 `tests/workflow_contracts`. It needs `uv`, Python 3.13 for the checker, and
-`pytest` and `pyyaml`, which `uv run --with` supplies. Both runs go through
-`UV` and `UV_ENV`, so a `uv` outside `PATH` can be injected. `make all` and CI
-run the target; `.github/cv005.toml` holds the repository name and nothing
-else. A Dependabot pull request merged by the automerge workflow fires no push
-event, so that merge publishes nothing until the next push to `main` or a manual
+`pytest` and `pyyaml`, pinned in the `Makefile`. Both runs go through the
+vendored `scripts/uv_gate.py` helper (`UV_GATE`), which needs `python3` 3.9 or
+newer, finds `uv` on `PATH` (outside `~/.lody`) and runs offline first with at
+most one online attempt; there is no `UV` override. `make all` and CI run the
+target; `.github/cv005.toml` holds the repository name and nothing else. A
+Dependabot pull request merged by the automerge workflow fires no push event,
+so that merge publishes nothing until the next push to `main` or a manual
 `workflow_dispatch` run (shared-actions #518 tracks the fix).
+
+A `uv` that reports only `Git operation failed` for a Git source missing from
+the cache is not retried online by the helper: warm the cache once by running
+`uv tool run` on that source, or use a `uv` that names the offline reason.
+
+`make lint` runs `make interrogate` first, which requires a docstring on every
+definition under `INTERROGATE_TARGETS` (`scripts` and `tests` by default)
+through the vendored helper. Add any new Python directory to the variable, and
+run `make interrogate INTERROGATE_TARGETS="-vv scripts tests"` to list each
+undocumented definition.
 
 ## YAML lint
 

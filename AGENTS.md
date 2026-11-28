@@ -31,7 +31,9 @@
 - **Keep file size manageable.** No single code file may be longer than 400
   lines.  Long switch statements or dispatch tables should be broken up by
   feature and constituents colocated with targets. Large blocks of test data
-  should be moved to external data files.
+  should be moved to external data files. A file vendored byte for byte from an
+  upstream, such as `scripts/uv_gate.py`, is exempt, because splitting it would
+  break its canonical digest.
 
 ## Documentation maintenance
 
@@ -222,8 +224,8 @@ project:
     checking Rust formatting across all packages, and Markdown wrapping and
     table markup for the tracked and untracked Markdown files that Git does not
     ignore, without modifying files.
-  - `make lint` runs, in order, the `interrogate` docstring gate over `tests`
-    (`--fail-under 100`, which also fails on any `MISSED` row),
+  - `make lint` runs, in order, the `interrogate` docstring gate over `scripts`
+    and `tests` (`--fail-under 100`, which also fails on any `MISSED` row),
     `cargo doc --no-deps` with `-D warnings` in `RUSTDOCFLAGS`,
     `cargo clippy --all-targets --all-features -- -D warnings`, and
     `whitaker --all -- --all-targets --all-features`. The Whitaker step prints
