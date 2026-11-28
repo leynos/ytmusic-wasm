@@ -224,7 +224,9 @@ project:
     checking Rust formatting across all packages, and Markdown wrapping and
     table markup for the tracked and untracked Markdown files that Git does not
     ignore, without modifying files.
-  - `make lint` runs, in order, the `interrogate` docstring gate over `tests`
+  - `make lint` runs, in order, the `interrogate` docstring gate over `scripts`
+    and
+    `tests`
     (`--fail-under 100`, which also fails on any `MISSED` row),
     `cargo doc --no-deps` with `-D warnings` in `RUSTDOCFLAGS`,
     `cargo clippy --all-targets --all-features -- -D warnings`, and
